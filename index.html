@@ -1,0 +1,11 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>17歩 ONLINE v0.4.1</title><link rel="stylesheet" href="style.css"></head><body>
+<div id="rotate" class="rotate"><div><h2>スマホを横向きにしてください</h2><p>17歩 ONLINE は横画面で遊びます。</p></div></div>
+<main>
+<header><h1>17歩 ONLINE <small>v0.4.1</small></h1><button id="reset" class="ghost">最初から</button></header>
+<section id="home" class="screen on"><div class="card"><h2>遊び方</h2><p>まずはCOM戦ならFirebaseなしですぐ遊べます。</p><div class="modes"><button id="com" class="primary">COMと対戦</button><button id="online" class="secondary">オンライン対戦</button></div><div id="onlineNote" class="note hidden">オンライン戦はFirebase接続版で使用します。COM戦は今すぐ遊べます。</div></div></section>
+<section id="setup" class="screen"><div class="card"><h2>COM対戦</h2><label>名前<input id="name" value="ゆか" maxlength="12"></label><button id="start" class="primary">開始</button></div></section>
+<section id="build" class="screen"><div class="bar"><b id="round"></b><b id="dealer"></b><b id="dora"></b><b id="timer"></b></div><div class="card"><h2 id="buildTitle"></h2><p>34枚から13枚を選択。黄色の牌が固定手牌候補です。</p><div id="pool" class="tiles"></div><p>選択 <b id="count">0</b>/13　<span id="tenpai"></span></p><div id="selected" class="tiles sel"></div><button id="confirm" class="primary" disabled>確定ON</button></div></section>
+<section id="play" class="screen"><div class="bar"><b id="pRound"></b><b id="pDealer"></b><b id="pDora"></b><b id="money"></b></div><div class="card"><h2 id="turn"></h2><div class="cols"><div><h3>固定13枚</h3><div id="fixed" class="tiles"></div><h3>捨て牌候補</h3><div id="cand" class="tiles"></div></div><div><h3>あなたの河</h3><div id="riverP" class="tiles river"></div><h3>COMの河</h3><div id="riverC" class="tiles river"></div></div></div></div></section>
+<div id="ronBox" class="overlay hidden"><div class="modal"><h2>ロンできます</h2><p><b id="sec">10</b>秒</p><button id="ron" class="danger">ロン</button><button id="pass" class="secondary">見逃す</button></div></div>
+<section id="result" class="screen"><div class="card"><h2 id="resultTitle"></h2><div id="resultBody"></div><button id="next" class="primary">次の局へ</button></div></section>
+</main><script src="script.js"></script></body></html>
