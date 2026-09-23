@@ -1,11 +1,137 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>17歩 ONLINE v0.4.1</title><link rel="stylesheet" href="style.css"></head><body>
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>17歩 ONLINE v0.4.32</title><meta name="theme-color" content="#0d2d23">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="17歩 ONLINE">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png"><link rel="stylesheet" href="style.css"></head><body>
 <div id="rotate" class="rotate"><div><h2>スマホを横向きにしてください</h2><p>17歩 ONLINE は横画面で遊びます。</p></div></div>
 <main>
-<header><h1>17歩 ONLINE <small>v0.4.1</small></h1><button id="reset" class="ghost">最初から</button></header>
-<section id="home" class="screen on"><div class="card"><h2>遊び方</h2><p>まずはCOM戦ならFirebaseなしですぐ遊べます。</p><div class="modes"><button id="com" class="primary">COMと対戦</button><button id="online" class="secondary">オンライン対戦</button></div><div id="onlineNote" class="note hidden">オンライン戦はFirebase接続版で使用します。COM戦は今すぐ遊べます。</div></div></section>
-<section id="setup" class="screen"><div class="card"><h2>COM対戦</h2><label>名前<input id="name" value="ゆか" maxlength="12"></label><button id="start" class="primary">開始</button></div></section>
-<section id="build" class="screen"><div class="bar"><b id="round"></b><b id="dealer"></b><b id="dora"></b><b id="timer"></b></div><div class="card"><h2 id="buildTitle"></h2><p>34枚から13枚を選択。黄色の牌が固定手牌候補です。</p><div id="pool" class="tiles"></div><p>選択 <b id="count">0</b>/13　<span id="tenpai"></span></p><div id="selected" class="tiles sel"></div><button id="confirm" class="primary" disabled>確定ON</button></div></section>
-<section id="play" class="screen"><div class="bar"><b id="pRound"></b><b id="pDealer"></b><b id="pDora"></b><b id="money"></b></div><div class="card"><h2 id="turn"></h2><div class="cols"><div><h3>固定13枚</h3><div id="fixed" class="tiles"></div><h3>捨て牌候補</h3><div id="cand" class="tiles"></div></div><div><h3>あなたの河</h3><div id="riverP" class="tiles river"></div><h3>COMの河</h3><div id="riverC" class="tiles river"></div></div></div></div></section>
-<div id="ronBox" class="overlay hidden"><div class="modal"><h2>ロンできます</h2><p><b id="sec">10</b>秒</p><button id="ron" class="danger">ロン</button><button id="pass" class="secondary">見逃す</button></div></div>
-<section id="result" class="screen"><div class="card"><h2 id="resultTitle"></h2><div id="resultBody"></div><button id="next" class="primary">次の局へ</button></div></section>
-</main><script src="script.js"></script></body></html>
+<header><h1>17歩 ONLINE <small>v0.4.32</small></h1><div class="header-actions"><button id="bgmToggle" class="ghost bgm-toggle">♪ BGM ON</button><button id="reset" class="ghost">最初から</button></div></header>
+<section id="home" class="screen on"><div class="card"><h2>CPU対戦版</h2><p>現在はCPU対戦の完成を優先しています。</p><p class="note">CPU難易度は「最強」固定。一度オンラインで開けば、以後は機内モードでも遊べます。</p><div class="modes"><button id="com" class="primary">CPU（最強）と対戦</button></div></div></section>
+<section id="setup" class="screen"><div class="card"><h2>CPU対戦（最強）</h2><label>名前<input id="name" value="ゆか" maxlength="12"></label><button id="start" class="primary">開始</button></div></section>
+<section id="build" class="screen">
+  <div class="status-bar status-build" aria-label="対局情報">
+    <div class="status-item">
+      <span class="status-label">局</span>
+      <b id="round" class="status-value"></b>
+    </div>
+    <div class="status-item">
+      <span class="status-label">親</span>
+      <b id="dealer" class="status-value"></b>
+    </div>
+    <div class="status-item status-dora">
+      <span class="status-label">ドラ</span>
+      <div id="dora" class="status-value status-dora-value"></div>
+    </div>
+    <div class="status-item status-money">
+      <span class="status-label">獲得金額</span>
+      <b id="buildMoney" class="status-value"></b>
+    </div>
+    <div class="status-item status-timer">
+      <span class="status-label">残り時間</span>
+      <b id="timer" class="status-value"></b>
+    </div>
+  </div>
+  <div class="card game-card">
+    <div class="section-head">
+      <h2 id="buildTitle"></h2>
+      <span class="section-help">34枚から固定13枚を作る</span>
+    </div>
+    <div id="pool" class="tiles"></div>
+    <div class="selection-summary">
+      <span>選択 <b id="count">0</b>/13</span>
+      <span id="tenpai"></span>
+    </div>
+    <div id="selected" class="tiles sel"></div>
+    <div class="build-actions">
+      <button id="clearSelection" class="secondary" disabled>全部戻す</button>
+      <button id="confirm" class="primary" disabled>確定ON</button>
+    </div>
+  </div>
+</section>
+<section id="play" class="screen">
+  <div class="status-bar status-play" aria-label="対局情報">
+    <div class="status-item">
+      <span class="status-label">局</span>
+      <b id="pRound" class="status-value"></b>
+    </div>
+    <div class="status-item">
+      <span class="status-label">親</span>
+      <b id="pDealer" class="status-value"></b>
+    </div>
+    <div class="status-item status-dora">
+      <span class="status-label">ドラ</span>
+      <div id="pDora" class="status-value status-dora-value"></div>
+    </div>
+    <div class="status-item status-money">
+      <span class="status-label">獲得金額</span>
+      <b id="money" class="status-value"></b>
+    </div>
+  </div>
+
+  <div class="card game-card table-card">
+    <div class="mahjong-table">
+      <div class="cpu-zone">
+        <div class="seat-badge">
+          <span class="seat-name">CPU</span>
+          <span class="seat-level">最強</span>
+        </div>
+        <div id="cpuHandBacks" class="cpu-hand-backs" aria-label="CPUの固定手牌13枚"></div>
+        <div class="turn-banner"><h2 id="turn"></h2></div>
+      </div>
+
+      <div class="table-center">
+        <div class="river-block river-block-player">
+          <div class="zone-label">あなたの河</div>
+          <div id="riverP" class="tiles river river-player"></div>
+        </div>
+
+        <div class="table-watermark" aria-hidden="true">17</div>
+
+        <div class="river-block river-block-cpu">
+          <div class="zone-label">CPUの河</div>
+          <div id="riverC" class="tiles river river-cpu"></div>
+        </div>
+      </div>
+
+      <div class="player-zone">
+        <div class="candidate-head">
+          <h3>捨て牌候補</h3>
+          <span id="discardHint" class="discard-hint">牌を操作して捨てる</span>
+        </div>
+        <div id="cand" class="tiles candidate-tiles"></div>
+
+        <div class="fixed-head">
+          <h3>固定13枚</h3>
+          <span class="fixed-lock">LOCKED</span>
+        </div>
+        <div id="fixed" class="tiles fixed-row"></div>
+      </div>
+    </div>
+  </div>
+</section>
+<div id="ronBox" class="overlay ron-overlay hidden">
+  <div class="modal ron-modal" role="dialog" aria-modal="true" aria-label="ロンできます">
+    <div class="ron-kicker">RON CHANCE</div>
+    <h2 class="ron-title">ロン！</h2>
+    <div id="ronTile" class="ron-tile-wrap"></div>
+    <div class="ron-count"><b id="sec">10</b><span>秒</span></div>
+    <div class="ron-actions">
+      <button id="ron" class="danger ron-button">ロン</button>
+      <button id="pass" class="secondary pass-button">見逃す</button>
+    </div>
+  </div>
+</div>
+<section id="result" class="screen"><div class="card result-card"><h2 id="resultTitle"></h2><div id="resultBody"></div><button id="next" class="primary result-next">次の局へ</button></div></section>
+</main>
+<audio id="bgmAudio" src="assets/audio/build_bgm.wav" preload="auto" loop playsinline></audio>
+<script src="script.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" })
+      .catch(err => console.warn("Service Worker registration failed:", err));
+  });
+}
+</script>
+</body></html>
