@@ -1,13 +1,13 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>17歩 ONLINE v0.4.32</title><meta name="theme-color" content="#0d2d23">
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>17歩 ONLINE v0.4.38</title><meta name="theme-color" content="#0d2d23">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="17歩 ONLINE">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="assets/icons/icon-192.png"><link rel="stylesheet" href="style.css"></head><body>
+<link rel="manifest" href="manifest.json?v=0.4.38">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png"><link rel="stylesheet" href="style.css?v=0.4.38"></head><body class="high-stakes-theme">
 <div id="rotate" class="rotate"><div><h2>スマホを横向きにしてください</h2><p>17歩 ONLINE は横画面で遊びます。</p></div></div>
 <main>
-<header><h1>17歩 ONLINE <small>v0.4.32</small></h1><div class="header-actions"><button id="bgmToggle" class="ghost bgm-toggle">♪ BGM ON</button><button id="reset" class="ghost">最初から</button></div></header>
-<section id="home" class="screen on"><div class="card"><h2>CPU対戦版</h2><p>現在はCPU対戦の完成を優先しています。</p><p class="note">CPU難易度は「最強」固定。一度オンラインで開けば、以後は機内モードでも遊べます。</p><div class="modes"><button id="com" class="primary">CPU（最強）と対戦</button></div></div></section>
+<header><h1>17歩 ONLINE <small>v0.4.38</small></h1><div class="header-actions"><button id="rulesOpenHeader" class="ghost rules-header-btn">ルール</button><button id="bgmToggle" class="ghost bgm-toggle">♪ BGM ON</button><button id="reset" class="ghost">最初から</button></div></header>
+<section id="home" class="screen on"><div class="card home-card"><h2>CPU対戦版</h2><p>現在はCPU対戦の完成を優先しています。</p><p class="note">CPU難易度は「最強」固定。一度オンラインで開けば、以後は機内モードでも遊べます。</p><div class="modes home-modes"><button id="com" class="primary">CPU（最強）と対戦</button><button id="rulesOpenHome" class="secondary">ルールを見る</button></div></div></section>
 <section id="setup" class="screen"><div class="card"><h2>CPU対戦（最強）</h2><label>名前<input id="name" value="ゆか" maxlength="12"></label><button id="start" class="primary">開始</button></div></section>
 <section id="build" class="screen">
   <div class="status-bar status-build" aria-label="対局情報">
@@ -24,7 +24,7 @@
       <div id="dora" class="status-value status-dora-value"></div>
     </div>
     <div class="status-item status-money">
-      <span class="status-label">獲得金額</span>
+      <span class="status-label">賞金 TOTAL</span>
       <b id="buildMoney" class="status-value"></b>
     </div>
     <div class="status-item status-timer">
@@ -35,7 +35,7 @@
   <div class="card game-card">
     <div class="section-head">
       <h2 id="buildTitle"></h2>
-      <span class="section-help">34枚から固定13枚を作る</span>
+      <span id="buildInputHint" class="section-help">スマホ：1タッチ / PC：Wクリック</span>
     </div>
     <div id="pool" class="tiles"></div>
     <div class="selection-summary">
@@ -64,7 +64,7 @@
       <div id="pDora" class="status-value status-dora-value"></div>
     </div>
     <div class="status-item status-money">
-      <span class="status-label">獲得金額</span>
+      <span class="status-label">賞金 TOTAL</span>
       <b id="money" class="status-value"></b>
     </div>
   </div>
@@ -75,6 +75,10 @@
         <div class="seat-badge">
           <span class="seat-name">CPU</span>
           <span class="seat-level">最強</span>
+        </div>
+        <div class="cpu-danger-tags" aria-hidden="true">
+          <span>裏卓の打ち手</span>
+          <span>PRESSURE MAX</span>
         </div>
         <div id="cpuHandBacks" class="cpu-hand-backs" aria-label="CPUの固定手牌13枚"></div>
         <div class="turn-banner"><h2 id="turn"></h2></div>
@@ -110,6 +114,84 @@
     </div>
   </div>
 </section>
+
+<div id="rulesBox" class="overlay rules-overlay hidden" aria-hidden="true">
+  <div class="modal rules-modal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+    <div class="rules-head">
+      <div>
+        <div class="rules-kicker">17 STEPS / CPU BATTLE</div>
+        <h2 id="rulesTitle">17歩 ONLINE ルール</h2>
+      </div>
+      <button id="rulesClose" class="ghost rules-close" aria-label="ルールを閉じる">×</button>
+    </div>
+
+    <div class="rules-scroll">
+      <section class="rule-section rule-important">
+        <h3>基本</h3>
+        <p>各プレイヤーは34枚を受け取り、その中から<strong>固定13枚</strong>を作ります。残り21枚が捨て牌候補です。固定13枚は対局中に変更できません。</p>
+      </section>
+
+      <section class="rule-section">
+        <h3>手作り</h3>
+        <p>制限時間は<strong>3分</strong>。通常の「確定ON」は13枚ちょうどでテンパイしている時だけ押せます。時間切れ時は、その時点の選択内容で強制確定し、13枚未満なら残りをランダムで補います。</p>
+        <p>固定13枚がテンパイなら、対局開始時から<strong>自動リーチ1飜</strong>が付きます。リーチ宣言や横向きの捨て牌はありません。</p>
+      </section>
+
+      <section class="rule-section">
+        <h3>対局</h3>
+        <p>固定13枚は触らず、残った候補から交互に1枚ずつ捨てます。1人最大<strong>17枚</strong>まで。17枚ずつ捨て切ってロンがなければ流局です。</p>
+        <p class="rule-control"><strong>操作：</strong>スマホ・タブレットは牌を1回タッチ。PCは同じ牌を短時間に2回クリックして捨てます。</p>
+      </section>
+
+      <section class="rule-section rule-red">
+        <h3>ロン</h3>
+        <p>相手の捨て牌を固定13枚に加え、14枚の和了形になり、かつ<strong>4飜以上</strong>ならロンできます。符計算はありません。</p>
+        <p>あなたにロン可能な牌が出た時は<strong>10秒</strong>以内に「ロン」か「見逃す」を選択。CPUは合法な4飜以上の和了なら<strong>自動でロン</strong>します。</p>
+      </section>
+
+      <section class="rule-section">
+        <h3>4飜判定に入るもの</h3>
+        <p>自動リーチ、通常役、表ドラ、一発、河底などを合計します。親は東、子は南が自風で、その刻子は1飜です。</p>
+        <p><strong>裏ドラはロン成立後のボーナス</strong>なので、4飜に届くかどうかの判定には使いません。</p>
+      </section>
+
+      <section class="rule-section rule-warning">
+        <h3>フリテン</h3>
+        <p>一度フリテンになると、その局が終わるまでロンできません。</p>
+        <p>① ロンできる牌を見逃した時。② 4飜未満でも、相手の捨て牌が自分の和了形を完成させた時。③ 自分で現在の待ち牌を捨てた時。これらでフリテンになります。</p>
+      </section>
+
+      <section class="rule-section">
+        <h3>ドラ・裏ドラ</h3>
+        <p>表ドラは13枚を作る前から公開されます。裏ドラは対局中は非公開で、合法なロンが成立した後だけ公開され、最終飜数に加算されます。</p>
+      </section>
+
+      <section class="rule-section">
+        <h3>獲得金額</h3>
+        <div class="rule-score-grid">
+          <span><b>4〜5飜</b>満貫</span>
+          <span><b>6〜7飜</b>跳満</span>
+          <span><b>8〜10飜</b>倍満</span>
+          <span><b>11〜12飜</b>三倍満</span>
+          <span><b>13飜〜</b>数え役満</span>
+          <span><b>役満</b>役満ごとに加算</span>
+        </div>
+        <p>子は満貫8,000円、親は12,000円から。お金は相手から奪うのではなく<strong>第三者から獲得</strong>するため、敗者の所持金は減りません。</p>
+      </section>
+
+      <section class="rule-section">
+        <h3>試合の流れ</h3>
+        <p><strong>1表 → 1裏 → 2表 → 2裏 → 3表 → 3裏</strong>の順で行い、終了時の累計獲得金額が高い方の勝ち。同額なら表・裏を1セットずつ延長します。</p>
+        <p>流局した場合は親継続で、同じ表／裏をもう一度行います。</p>
+      </section>
+    </div>
+
+    <div class="rules-footer">
+      <button id="rulesCloseBottom" class="primary">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <div id="ronBox" class="overlay ron-overlay hidden">
   <div class="modal ron-modal" role="dialog" aria-modal="true" aria-label="ロンできます">
     <div class="ron-kicker">RON CHANCE</div>
@@ -124,12 +206,13 @@
 </div>
 <section id="result" class="screen"><div class="card result-card"><h2 id="resultTitle"></h2><div id="resultBody"></div><button id="next" class="primary result-next">次の局へ</button></div></section>
 </main>
-<audio id="bgmAudio" src="assets/audio/build_bgm.wav" preload="auto" loop playsinline></audio>
-<script src="script.js"></script>
+<audio id="buildBgmAudio" src="assets/audio/tanyao_bgm.mp3?v=0.4.38" preload="auto" loop playsinline></audio>
+<audio id="playBgmAudio" src="assets/audio/kamiwaza_bgm.mp3?v=0.4.38" preload="auto" loop playsinline></audio>
+<script src="script.js?v=0.4.38"></script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=0.4.38", { updateViaCache: "none" })
       .catch(err => console.warn("Service Worker registration failed:", err));
   });
 }

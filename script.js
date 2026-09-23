@@ -191,22 +191,35 @@ function tileHTML(t, mini=false){
 // ===== BGM / 効果音（実音源ファイル方式） =====
 let SOUND={
   enabled:localStorage.getItem("17po_bgm")!=="off",
-  bgm:null,
+  buildBgm:null,
+  playBgm:null,
+  active:null,
   phase:"build",
   normalVolume:.24,
   duckVolume:.10,
   ducked:false,
   fadeFrame:null,
   fadeDuration:3000,
+  playPrimed:false,
+  pendingResume:false,
   sfx:{}
 };
 
 function initAudio(){
-  SOUND.bgm=$("#bgmAudio");
-  if(SOUND.bgm){
-    SOUND.bgm.volume=SOUND.normalVolume;
-    SOUND.bgm.loop=true;
+  SOUND.buildBgm=$("#buildBgmAudio");
+  SOUND.playBgm=$("#playBgmAudio");
+
+  for(const a of [SOUND.buildBgm,SOUND.playBgm]){
+    if(!a)continue;
+    a.loop=true;
+    a.preload="auto";
+    a.playsInline=true;
   }
+
+  if(SOUND.buildBgm)SOUND.buildBgm.volume=SOUND.normalVolume;
+  if(SOUND.playBgm)SOUND.playBgm.volume=0;
+  SOUND.active=SOUND.buildBgm;
+
   SOUND.sfx={
     select:new Audio("assets/audio/select.wav"),
     deselect:new Audio("assets/audio/deselect.wav"),
@@ -214,165 +227,251 @@ function initAudio(){
     discard:new Audio("assets/audio/discard.wav"),
     ron:new Audio("assets/audio/ron.wav")
   };
+
   Object.values(SOUND.sfx).forEach(a=>{
     a.preload="auto";
     a.volume=.72;
   });
-  updateBgmButton();
+
+  // 自動開始がブロックされた場合、次の操作で自動復帰する。
+  document.addEventListener("pointerdown",resumePendingBgm,{capture:true});
+  document.addEventListener("keydown",resumePendingBgm,{capture:true});
+
+  updateBgmButton()
 }
 
 function cancelBgmFade(){
   if(SOUND.fadeFrame!==null){
     cancelAnimationFrame(SOUND.fadeFrame);
-    SOUND.fadeFrame=null;
+    SOUND.fadeFrame=null
   }
 }
 
 function currentBgmTargetVolume(){
-  return SOUND.ducked?SOUND.duckVolume:SOUND.normalVolume;
+  return SOUND.ducked?SOUND.duckVolume:SOUND.normalVolume
+}
+
+function activeBgm(){
+  return SOUND.phase==="play"?SOUND.playBgm:SOUND.buildBgm
+}
+
+function pauseInactiveBgm(){
+  const inactive=SOUND.phase==="play"?SOUND.buildBgm:SOUND.playBgm;
+  if(inactive&&!inactive.paused)inactive.pause()
+}
+
+function markPlayFailure(){
+  SOUND.pendingResume=true
+}
+
+function markPlaySuccess(){
+  SOUND.pendingResume=false
+}
+
+function safePlay(audio){
+  if(!audio)return Promise.resolve(false);
+
+  try{
+    const p=audio.play();
+    if(p&&typeof p.then==="function"){
+      return p.then(()=>{
+        markPlaySuccess();
+        return true
+      }).catch(()=>{
+        markPlayFailure();
+        return false
+      })
+    }
+
+    markPlaySuccess();
+    return Promise.resolve(true)
+  }catch(e){
+    markPlayFailure();
+    return Promise.resolve(false)
+  }
 }
 
 function fadeInBgm(duration=SOUND.fadeDuration){
-  if(!SOUND.bgm||!SOUND.enabled)return;
+  const audio=activeBgm();
+  if(!audio||!SOUND.enabled)return;
 
   cancelBgmFade();
-  SOUND.bgm.volume=0;
+  audio.volume=0;
 
   const started=performance.now();
 
   const step=now=>{
-    if(!SOUND.enabled||!SOUND.bgm){
+    if(!SOUND.enabled||audio!==activeBgm()){
       cancelBgmFade();
       return
     }
 
     const progress=Math.min(1,(now-started)/duration);
-    // なめらかなease-out。序盤は静かに、自然に通常音量へ。
     const eased=1-Math.pow(1-progress,3);
-    SOUND.bgm.volume=currentBgmTargetVolume()*eased;
+    audio.volume=currentBgmTargetVolume()*eased;
 
     if(progress<1){
       SOUND.fadeFrame=requestAnimationFrame(step)
     }else{
       SOUND.fadeFrame=null;
-      SOUND.bgm.volume=currentBgmTargetVolume()
+      audio.volume=currentBgmTargetVolume()
     }
   };
 
   SOUND.fadeFrame=requestAnimationFrame(step)
 }
 
+function primePlayBgmFromGesture(){
+  if(SOUND.playPrimed||!SOUND.playBgm)return;
+
+  const a=SOUND.playBgm;
+  const oldVolume=a.volume;
+  a.volume=0;
+
+  try{a.currentTime=0}catch(e){}
+
+  try{
+    const p=a.play();
+
+    if(p&&typeof p.then==="function"){
+      p.then(()=>{
+        a.pause();
+        try{a.currentTime=0}catch(e){}
+        a.volume=oldVolume;
+        SOUND.playPrimed=true
+      }).catch(()=>{
+        a.volume=oldVolume
+      })
+    }else{
+      a.pause();
+      try{a.currentTime=0}catch(e){}
+      a.volume=oldVolume;
+      SOUND.playPrimed=true
+    }
+  }catch(e){
+    a.volume=oldVolume
+  }
+}
+
+function unlockAudioFromGesture(){
+  // 最初の「開始」操作で対局用BGMも一度だけ無音再生しておく。
+  // これによりタイムアウト開始でもブラウザの自動再生制限に掛かりにくくなる。
+  primePlayBgmFromGesture()
+}
+
 function setBgmPhase(phase){
-  if(!SOUND.bgm)return;
-
-  const next=phase==="play"
-    ?"assets/audio/kamiwaza_bgm.mp3"
-    :"assets/audio/tanyao_bgm.mp3";
-
-  SOUND.phase=phase;
+  SOUND.phase=phase==="play"?"play":"build";
   SOUND.ducked=false;
-
-  const current=SOUND.bgm.getAttribute("src")||"";
-  const changing=!current.endsWith(next);
-
   cancelBgmFade();
 
-  if(changing){
-    SOUND.bgm.pause();
-    SOUND.bgm.setAttribute("src",next);
-    SOUND.bgm.load();
+  const audio=activeBgm();
+  SOUND.active=audio;
+  pauseInactiveBgm();
 
-    // 対局BGMは毎局、曲頭から開始。
-    if(phase==="play"){
-      try{SOUND.bgm.currentTime=0}catch(e){}
-    }
-  }
-
-  if(!SOUND.enabled){
-    SOUND.bgm.volume=currentBgmTargetVolume();
+  if(!audio){
     updateBgmButton();
     return
   }
 
-  if(phase==="play"){
-    SOUND.bgm.volume=0;
-    const p=SOUND.bgm.play();
-    if(p&&p.then){
-      p.then(()=>fadeInBgm()).catch(()=>{});
-    }else{
-      fadeInBgm()
-    }
+  if(SOUND.phase==="play"){
+    try{audio.currentTime=0}catch(e){}
+    audio.volume=0
   }else{
-    SOUND.bgm.volume=currentBgmTargetVolume();
-    const p=SOUND.bgm.play();
-    if(p&&p.catch)p.catch(()=>{})
+    audio.volume=currentBgmTargetVolume()
   }
+
+  if(!SOUND.enabled){
+    updateBgmButton();
+    return
+  }
+
+  safePlay(audio).then(ok=>{
+    if(!ok)return;
+    if(SOUND.phase==="play")fadeInBgm();
+    else audio.volume=currentBgmTargetVolume()
+  });
 
   updateBgmButton()
 }
 
 function startBgm(){
-  if(!SOUND.enabled||!SOUND.bgm){
+  const audio=activeBgm();
+
+  if(!SOUND.enabled||!audio){
     updateBgmButton();
     return
   }
 
   cancelBgmFade();
 
-  if(SOUND.phase==="play"){
-    SOUND.bgm.volume=0;
-    const p=SOUND.bgm.play();
-    if(p&&p.then){
-      p.then(()=>fadeInBgm()).catch(()=>{});
-    }else{
-      fadeInBgm()
-    }
-  }else{
-    SOUND.bgm.volume=currentBgmTargetVolume();
-    const p=SOUND.bgm.play();
-    if(p&&p.catch)p.catch(()=>{})
-  }
+  if(SOUND.phase==="play")audio.volume=0;
+  else audio.volume=currentBgmTargetVolume();
+
+  safePlay(audio).then(ok=>{
+    if(ok&&SOUND.phase==="play")fadeInBgm()
+  });
 
   updateBgmButton()
 }
 
 function pauseBgm(){
   cancelBgmFade();
-  if(SOUND.bgm)SOUND.bgm.pause()
+  for(const a of [SOUND.buildBgm,SOUND.playBgm]){
+    if(a&&!a.paused)a.pause()
+  }
+}
+
+function resumePendingBgm(){
+  if(!SOUND.pendingResume||!SOUND.enabled)return;
+
+  const audio=activeBgm();
+  if(!audio)return;
+
+  safePlay(audio).then(ok=>{
+    if(ok&&SOUND.phase==="play"&&audio.volume===0)fadeInBgm()
+  })
 }
 
 function setBgmDuck(duck){
   SOUND.ducked=!!duck;
-  if(!SOUND.bgm)return;
+  const audio=activeBgm();
+  if(!audio)return;
 
-  // フェード中は次フレームから目標音量が自動で切り替わる。
   if(SOUND.fadeFrame===null){
-    SOUND.bgm.volume=currentBgmTargetVolume()
+    audio.volume=currentBgmTargetVolume()
   }
 }
 
 function toggleBgm(){
   SOUND.enabled=!SOUND.enabled;
   localStorage.setItem("17po_bgm",SOUND.enabled?"on":"off");
-  if(SOUND.enabled)startBgm();else pauseBgm();
-  updateBgmButton();
+
+  if(SOUND.enabled){
+    unlockAudioFromGesture();
+    startBgm()
+  }else{
+    pauseBgm()
+  }
+
+  updateBgmButton()
 }
 
 function updateBgmButton(){
   const b=$("#bgmToggle");
   if(!b)return;
   b.textContent=SOUND.enabled?"♪ BGM ON":"♪ BGM OFF";
-  b.classList.toggle("off",!SOUND.enabled);
+  b.classList.toggle("off",!SOUND.enabled)
 }
 
 function playSfx(name,volume=1){
   const src=SOUND.sfx[name];
   if(!src)return;
+
   try{
     const a=src.cloneNode();
     a.volume=Math.max(0,Math.min(1,src.volume*volume));
     const p=a.play();
-    if(p&&p.catch)p.catch(()=>{});
+    if(p&&p.catch)p.catch(()=>{})
   }catch(e){}
 }
 
@@ -404,9 +503,29 @@ function el(t,fn){
   return b
 }
 function show(id){document.querySelectorAll(".screen").forEach(x=>x.classList.remove("on"));$(id).classList.add("on")}
-$("#com").onclick=()=>show("#setup");$("#reset").onclick=()=>location.reload();$("#bgmToggle").onclick=toggleBgm;updateBgmButton();$("#start").onclick=()=>{setBgmPhase("build");startBgm();G.name=$("#name").value.trim()||"プレイヤー";newRound()}
+$("#com").onclick=()=>show("#setup");$("#reset").onclick=()=>location.reload();$("#bgmToggle").onclick=toggleBgm;updateBgmButton();$("#start").onclick=()=>{unlockAudioFromGesture();setBgmPhase("build");G.name=$("#name").value.trim()||"プレイヤー";newRound()}
 
-function newRound(){let d=deck();G.hands=[sortTiles(d.slice(0,34)),sortTiles(d.slice(34,68))];let w=d.slice(68),p=Math.floor(Math.random()*34);G.dora=w[p];G.ura=w[p+34];G.sel=[];G.river=[[],[]];G.fur=[false,false];G.time=180;if(G.round==1&&G.half=="表"&&G.dice[0]===0)decideInitialDealer();build()}
+function newRound(){
+  clearBuildInputArm();
+  clearMouseDiscardArm();
+  clearInterval(G.ronInt);
+  G.pending=null;
+  G.wasDraw=false;
+  $("#ronBox")?.classList.add("hidden");
+
+  let d=deck();
+  G.hands=[sortTiles(d.slice(0,34)),sortTiles(d.slice(34,68))];
+  let w=d.slice(68),p=Math.floor(Math.random()*34);
+  G.dora=w[p];
+  G.ura=w[p+34];
+  G.sel=[];
+  G.river=[[],[]];
+  G.fur=[false,false];
+  G.time=180;
+
+  if(G.round==1&&G.half==="表"&&G.dice[0]===0)decideInitialDealer();
+  build()
+}
 function build(){
   setBgmPhase("build");
   show("#build");
@@ -427,32 +546,167 @@ function build(){
   },1000)
 }
 function timer(){let m=Math.floor(G.time/60),s=G.time%60;$("#timer").textContent=`${m}:${String(s).padStart(2,"0")}`}
+
+let buildInputArmedKey=null;
+let buildInputArmedNode=null;
+let buildInputArmTimer=null;
+let lastBuildTouchAt=0;
+const BUILD_DOUBLE_CLICK_WINDOW=1000;
+
+function defaultBuildInputHint(){
+  const touchLike=window.matchMedia?.("(pointer: coarse)")?.matches;
+  return touchLike
+    ?"牌をタッチして選択 / 選択解除"
+    :"牌をWクリックして選択 / 選択解除"
+}
+
+function clearBuildInputArm(){
+  if(buildInputArmTimer!==null){
+    clearTimeout(buildInputArmTimer);
+    buildInputArmTimer=null
+  }
+
+  if(buildInputArmedNode){
+    buildInputArmedNode.classList.remove("build-input-armed");
+    buildInputArmedNode=null
+  }
+
+  buildInputArmedKey=null;
+
+  const hint=$("#buildInputHint");
+  if(hint)hint.textContent=defaultBuildInputHint()
+}
+
+function armBuildInput(key,node){
+  if(buildInputArmTimer!==null){
+    clearTimeout(buildInputArmTimer);
+    buildInputArmTimer=null
+  }
+
+  if(buildInputArmedNode && buildInputArmedNode!==node){
+    buildInputArmedNode.classList.remove("build-input-armed")
+  }
+
+  buildInputArmedKey=key;
+  buildInputArmedNode=node;
+  node.classList.add("build-input-armed");
+
+  const hint=$("#buildInputHint");
+  if(hint)hint.textContent="同じ牌をもう一度クリック";
+
+  buildInputArmTimer=setTimeout(()=>{
+    clearBuildInputArm()
+  },BUILD_DOUBLE_CLICK_WINDOW)
+}
+
+function commitBuildTile(index,isSelected){
+  if(!Number.isInteger(index))return;
+
+  clearBuildInputArm();
+
+  if(isSelected){
+    if(!G.sel.includes(index))return;
+    playSfx("deselect");
+    G.sel=G.sel.filter(x=>x!==index);
+    renderBuild();
+    return
+  }
+
+  if(G.sel.includes(index) || G.sel.length>=13)return;
+  playSfx("select");
+  G.sel.push(index);
+  renderBuild()
+}
+
+function makeBuildTile(index,isSelected){
+  const t=G.hands[0][index];
+  const b=el(t);
+  const key=`${isSelected?"selected":"pool"}:${index}`;
+
+  b.dataset.handIndex=String(index);
+  b.dataset.buildZone=isSelected?"selected":"pool";
+
+  const commit=()=>commitBuildTile(index,isSelected);
+
+  // スマホ / タブレット：1回タッチで選択・選択解除。
+  b.addEventListener("pointerup",e=>{
+    if(e.pointerType==="touch"||e.pointerType==="pen"){
+      lastBuildTouchAt=performance.now();
+      e.preventDefault();
+      commit()
+    }
+  });
+
+  // PC：同じ牌への2回クリックで確定。
+  // DOMを作り直す前に2回目まで判定するので、表→裏でも安定して動作する。
+  b.addEventListener("click",e=>{
+    if(performance.now()-lastBuildTouchAt<900)return;
+
+    e.preventDefault();
+
+    if(buildInputArmedKey===key){
+      commit()
+    }else{
+      armBuildInput(key,b)
+    }
+  });
+
+  // ブラウザが正式なdblclickを発火した場合も保険として受ける。
+  b.addEventListener("dblclick",e=>{
+    if(performance.now()-lastBuildTouchAt<900)return;
+    e.preventDefault();
+    commit()
+  });
+
+  return b
+}
+
 function renderBuild(){
   timer();
+
+  // 選択確定後の再描画では、古いDOMに紐づく1回目クリック状態を残さない。
+  if(buildInputArmedNode && !document.body.contains(buildInputArmedNode)){
+    clearBuildInputArm()
+  }
+
   $("#pool").innerHTML="";
   $("#selected").innerHTML="";
+
   const poolIndices=G.hands[0].map((_,i)=>i).filter(i=>!G.sel.includes(i));
+
   sortIndicesByTiles(poolIndices,G.hands[0]).forEach(i=>{
-    $("#pool").append(el(G.hands[0][i],()=>{if(G.sel.length<13){playSfx("select");G.sel.push(i);renderBuild()}}))
+    $("#pool").append(makeBuildTile(i,false))
   });
+
   sortIndicesByTiles(G.sel,G.hands[0]).forEach(i=>{
-    $("#selected").append(el(G.hands[0][i],()=>{playSfx("deselect");G.sel=G.sel.filter(x=>x!=i);renderBuild()}))
+    $("#selected").append(makeBuildTile(i,true))
   });
+
+  const hint=$("#buildInputHint");
+  if(hint&&!buildInputArmedKey)hint.textContent=defaultBuildInputHint();
+
   $("#count").textContent=G.sel.length;
+
   let w=G.sel.length==13?waits(G.sel.map(i=>G.hands[0][i])):[];
-  $("#tenpai").textContent=w.length?`テンパイ：${sortTiles(w).map(tt).join("・")}`:G.sel.length==13?"ノーテン":"";
+  $("#tenpai").textContent=w.length
+    ?`テンパイ：${sortTiles(w).map(tt).join("・")}`
+    :G.sel.length==13
+      ?"ノーテン"
+      :"";
+
   $("#confirm").disabled=!w.length;
   $("#clearSelection").disabled=G.sel.length===0
 }
 $("#clearSelection").onclick=()=>{
   if(!G.sel.length)return;
+  clearBuildInputArm();
   playSfx("deselect");
   G.sel=[];
   renderBuild()
 };
-$("#confirm").onclick=()=>{playSfx("confirm");clearInterval(G.timer);startPlay()}
-function force(){let r=G.hands[0].map((_,i)=>i).filter(i=>!G.sel.includes(i));while(G.sel.length<13)G.sel.push(r.splice(Math.floor(Math.random()*r.length),1)[0]);playSfx("confirm",.75);startPlay()}
-function startPlay(){setBgmPhase("play");G.fixed[0]=sortTiles(G.sel.map(i=>G.hands[0][i]));G.cand[0]=sortTiles(G.hands[0].filter((_,i)=>!G.sel.includes(i)));makeComHand();G.turn=G.dealer;show("#play");renderPlay();if(G.turn==1)setTimeout(comTurn,450)}
+$("#confirm").onclick=()=>{clearBuildInputArm();playSfx("confirm");clearInterval(G.timer);startPlay()}
+function force(){clearBuildInputArm();let r=G.hands[0].map((_,i)=>i).filter(i=>!G.sel.includes(i));while(G.sel.length<13)G.sel.push(r.splice(Math.floor(Math.random()*r.length),1)[0]);playSfx("confirm",.75);startPlay()}
+function startPlay(){clearBuildInputArm();clearMouseDiscardArm();setBgmPhase("play");G.fixed[0]=sortTiles(G.sel.map(i=>G.hands[0][i]));G.cand[0]=sortTiles(G.hands[0].filter((_,i)=>!G.sel.includes(i)));makeComHand();G.turn=G.dealer;show("#play");renderPlay();if(G.turn==1)setTimeout(comTurn,450)}
 
 function countsToHand(c){
   const a=[];
@@ -789,6 +1043,27 @@ function renderCpuBacks(){
   }
 }
 
+function renderMoneyStatus(){
+  const box=$("#money");
+  if(!box)return;
+
+  const pLeader=G.money[0]>G.money[1];
+  const cLeader=G.money[1]>G.money[0];
+  box.innerHTML=`
+    <span class="money-status">
+      <span class="money-chip ${pLeader?"leader":""}">
+        <span class="money-chip-name">${G.name}</span>
+        <b class="money-chip-value">¥${G.money[0].toLocaleString()}</b>
+      </span>
+      <span class="money-divider">VS</span>
+      <span class="money-chip ${cLeader?"leader":""}">
+        <span class="money-chip-name">CPU</span>
+        <b class="money-chip-value">¥${G.money[1].toLocaleString()}</b>
+      </span>
+    </span>
+  `
+}
+
 
 function updateDiscardControl(){
   const humanTurn=G.turn===0 && !G.pending;
@@ -826,6 +1101,8 @@ function updateCandidateIndexes(){
 
 let mouseDiscardArmedNode=null;
 let mouseDiscardArmTimer=null;
+let lastTouchDiscardAt=0;
+const MOUSE_DOUBLE_CLICK_WINDOW=1000;
 
 function clearMouseDiscardArm(){
   if(mouseDiscardArmTimer!==null){
@@ -857,7 +1134,7 @@ function armMouseDiscard(b){
 
   mouseDiscardArmTimer=setTimeout(()=>{
     clearMouseDiscardArm()
-  },520)
+  },MOUSE_DOUBLE_CLICK_WINDOW)
 }
 
 function makeCandidateTile(t,i){
@@ -866,31 +1143,46 @@ function makeCandidateTile(t,i){
 
   const throwThisTile=()=>{
     if(G.turn!==0||G.pending)return;
+
     const currentIndex=Number(b.dataset.index);
     if(!Number.isInteger(currentIndex))return;
+
     clearMouseDiscardArm();
     discard(0,currentIndex,b)
   };
 
-  // スマホ・タブレット：1タッチで即捨て。
+  // タッチ / ペンは1回で即捨て。
   b.addEventListener("pointerup",e=>{
     if(e.pointerType==="touch"||e.pointerType==="pen"){
+      lastTouchDiscardAt=performance.now();
       e.preventDefault();
-      throwThisTile();
-      return
+      throwThisTile()
     }
+  });
 
-    // PCマウス：ブラウザのdblclickイベントには頼らず、
-    // 同じ牌を520ms以内に2回押したかをこちらで判定する。
-    if(e.pointerType==="mouse"){
-      e.preventDefault();
+  // PCは標準dblclickに依存せず、同じ牌への2回の通常clickで判定。
+  // 1秒以内ならOS側のダブルクリック速度設定に左右されにくい。
+  b.addEventListener("click",e=>{
+    // タッチ後にブラウザが生成する疑似clickは無視。
+    if(performance.now()-lastTouchDiscardAt<900)return;
 
-      if(mouseDiscardArmedNode===b){
-        throwThisTile()
-      }else{
-        armMouseDiscard(b)
-      }
+    const finePointer=window.matchMedia?.("(pointer: fine)")?.matches;
+    if(!finePointer&&e.detail===0)return;
+
+    e.preventDefault();
+
+    if(mouseDiscardArmedNode===b){
+      throwThisTile()
+    }else{
+      armMouseDiscard(b)
     }
+  });
+
+  // ネイティブdblclickも保険として残す。
+  b.addEventListener("dblclick",e=>{
+    if(performance.now()-lastTouchDiscardAt<900)return;
+    e.preventDefault();
+    throwThisTile()
   });
 
   return b
@@ -953,6 +1245,10 @@ function appendDiscardToRiver(p,t,node=null){
 
   b.onclick=null;
   b.removeAttribute("data-index");
+  b.classList.remove("mouse-discard-armed");
+  b.classList.add("river-static-tile");
+  b.setAttribute("aria-disabled","true");
+  b.tabIndex=-1;
   if(typeof b.blur==="function")b.blur();
 
   target.appendChild(b);
@@ -967,13 +1263,17 @@ function renderPlay(){
   $("#pRound").textContent=`${G.round}回${G.half}`;
   $("#pDealer").textContent=names[G.dealer];
   renderDora("#pDora");
-  $("#money").textContent=`${G.name} ¥${G.money[0].toLocaleString()}　CPU ¥${G.money[1].toLocaleString()}`;
+  renderMoneyStatus();
 
   renderCpuBacks();
 
   $("#fixed").innerHTML="";
   sortTiles(G.fixed[0]).forEach(t=>$("#fixed").append(el(t)));
 
+  // 前局・前ターンの入力ロックやWクリック待機状態を必ず初期化。
+  // その後 updateTurnUI() で、現在の手番に応じて正しい状態へ戻す。
+  clearMouseDiscardArm();
+  $("#cand").classList.remove("locked");
   $("#cand").innerHTML="";
   G.cand[0].forEach((t,i)=>$("#cand").append(makeCandidateTile(t,i)));
 
@@ -983,7 +1283,6 @@ function renderPlay(){
   $("#riverC").innerHTML="";
   G.river[1].forEach(t=>$("#riverC").append(el(t)));
 
-  clearDiscardSelection();
   updateTurnUI()
 }
 
@@ -1010,6 +1309,7 @@ function discard(p,i,node=null){
         ronPrompt(o,p,t,ev);
         return
       }else{
+        playSfx("ron");
         finishRon(o,t,ev);
         return
       }
@@ -1043,7 +1343,6 @@ function comDiscardSafety(t){
   if(G.fur[0])return 0;
 
   const humanRiver=G.river[0];
-  const comRiver=G.river[1];
 
   // 相手自身がすでに捨てた同一牌は、このゲームでは完全な現物。
   if(humanRiver.includes(t))return 1000000;
@@ -1052,10 +1351,11 @@ function comDiscardSafety(t){
 
   // CPUの34枚＋公開河＋表ドラ表示牌から、相手が持てる枚数を読む。
   const ownCopies=cnt(G.hands[1],t);
+
+  // CPUの河はもともとCPUの34枚に含まれているため、ここで足すと二重計上になる。
   const visibleCopies=
     ownCopies+
     cnt(humanRiver,t)+
-    cnt(comRiver,t)+
     (G.dora===t?1:0);
 
   if(visibleCopies>=4)return 900000;
@@ -1181,10 +1481,18 @@ function pass(){
   clearInterval(G.ronInt);
   let r=G.pending;
   if(!r)return;
+
   G.fur[r.w]=true;
   $("#ronBox").classList.add("hidden");
   $("#ronTile").innerHTML="";
   G.pending=null;
+
+  // 両者17枚捨て済みの最終ロン牌を見逃した場合は、そのまま流局。
+  if(G.river[0].length>=17&&G.river[1].length>=17){
+    draw();
+    return
+  }
+
   G.turn=0;
   updateTurnUI()
 }
@@ -1229,6 +1537,17 @@ function tierClassName(tier){
   if(tier==="倍満")return "tier-baiman";
   if(tier==="跳満")return "tier-haneman";
   return "tier-mangan"
+}
+
+function englishTierName(tier){
+  const multiYakuman=tier.match(/^(\d+)倍役満$/);
+  if(multiYakuman)return `${multiYakuman[1]}x YAKUMAN`;
+  if(tier==="役満")return "YAKUMAN";
+  if(tier==="数え役満")return "COUNTED YAKUMAN";
+  if(tier==="三倍満")return "SANBAIMAN";
+  if(tier==="倍満")return "BAIMAN";
+  if(tier==="跳満")return "HANEMAN";
+  return "MANGAN"
 }
 
 function currentMoneyMarkup(winnerIndex=null){
@@ -1287,7 +1606,11 @@ function finishRon(w,t,ev){
   $("#resultBody").innerHTML=`
     <div class="result-panel ${tierClassName(tier)}">
       <div class="score-hero">
-        <span class="score-tier">${tier}</span>
+        <div class="score-tier-stack">
+          <span class="score-kicker">HIGH STAKES</span>
+          <span class="score-tier">${tier}</span>
+          <span class="score-subtier">${englishTierName(tier)}</span>
+        </div>
         <strong>+¥${amount.toLocaleString()}</strong>
       </div>
 
@@ -1332,7 +1655,11 @@ function showFinalResult(){
   $("#resultBody").innerHTML=`
     <div class="result-panel final-result-panel">
       <div class="score-hero final-score">
-        <span class="score-tier">FINAL</span>
+        <div class="score-tier-stack">
+          <span class="score-kicker">FINAL TABLE</span>
+          <span class="score-tier">FINAL</span>
+          <span class="score-subtier">HIGH STAKES WIN</span>
+        </div>
         <strong>${winner} WIN</strong>
       </div>
       ${currentMoneyMarkup(wi)}
@@ -1777,3 +2104,34 @@ function waits(h){
   return r
 }
 
+
+
+// ===== ルール表示 =====
+function openRules(){
+  const box=$("#rulesBox");
+  if(!box)return;
+  box.classList.remove("hidden");
+  box.setAttribute("aria-hidden","false");
+  document.body.classList.add("rules-open");
+  const scroll=box.querySelector(".rules-scroll");
+  if(scroll)scroll.scrollTop=0
+}
+
+function closeRules(){
+  const box=$("#rulesBox");
+  if(!box)return;
+  box.classList.add("hidden");
+  box.setAttribute("aria-hidden","true");
+  document.body.classList.remove("rules-open")
+}
+
+$("#rulesOpenHeader")?.addEventListener("click",openRules);
+$("#rulesOpenHome")?.addEventListener("click",openRules);
+$("#rulesClose")?.addEventListener("click",closeRules);
+$("#rulesCloseBottom")?.addEventListener("click",closeRules);
+$("#rulesBox")?.addEventListener("click",e=>{
+  if(e.target===$("#rulesBox"))closeRules()
+});
+window.addEventListener("keydown",e=>{
+  if(e.key==="Escape"&&!$("#rulesBox")?.classList.contains("hidden"))closeRules()
+});

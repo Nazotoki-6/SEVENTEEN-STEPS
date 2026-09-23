@@ -1,8 +1,10 @@
-const CACHE_NAME = "17po-online-v0.4.32";
+const CACHE_NAME = "17po-online-v0.4.38";
 const APP_SHELL = [
   "./",
   "./index.html",
+  "./assets/audio/tanyao_bgm.mp3?v=0.4.38",
   "./assets/audio/tanyao_bgm.mp3",
+  "./assets/audio/kamiwaza_bgm.mp3?v=0.4.38",
   "./assets/audio/kamiwaza_bgm.mp3",
   "./assets/audio/confirm.wav",
   "./assets/audio/deselect.wav",
@@ -45,8 +47,11 @@ const APP_SHELL = [
   "./assets/souzu/7s.jpg",
   "./assets/souzu/8s.jpg",
   "./assets/souzu/9s.jpg",
+  "./manifest.json?v=0.4.38",
   "./manifest.json",
+  "./script.js?v=0.4.38",
   "./script.js",
+  "./style.css?v=0.4.38",
   "./style.css"
 ];
 
