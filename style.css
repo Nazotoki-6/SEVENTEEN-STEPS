@@ -3291,3 +3291,255 @@ body.rules-open{
     padding:2px 5px;
   }
 }
+
+
+/* =========================================================
+   v0.4.42 CPUロン視認性 / ドラ拡大 / BGM切替改善
+   ========================================================= */
+
+/* ドラは重要情報なので一回り大きく表示 */
+.status-dora-value{
+  min-height:52px;
+}
+.status-dora-value .mini-tile{
+  width:38px!important;
+  height:52px!important;
+  border-radius:6px!important;
+  box-shadow:
+    0 2px 0 #8f8972,
+    0 6px 12px rgba(0,0,0,.28)!important;
+}
+.status-dora{
+  overflow:visible;
+}
+
+/* CPUロン時は結果画面へ行く前に、放銃牌を0.9秒しっかり見せる */
+.table-card{
+  position:relative;
+}
+
+.cpu-ron-freeze .river-player .tile{
+  opacity:.46;
+  filter:brightness(.72) saturate(.75);
+  transition:
+    opacity .16s ease,
+    filter .16s ease,
+    transform .16s ease,
+    box-shadow .16s ease;
+}
+
+.cpu-ron-freeze .river-player .tile.ron-winning-discard{
+  opacity:1;
+  filter:none;
+  position:relative;
+  z-index:8;
+  transform:translateY(-7px) scale(1.18);
+  box-shadow:
+    0 0 0 3px rgba(255,81,81,.72),
+    0 0 0 6px rgba(235,201,91,.34),
+    0 0 30px rgba(255,70,70,.50),
+    inset 0 1px 0 rgba(255,255,255,.96),
+    0 3px 0 #8e856f,
+    0 9px 16px rgba(0,0,0,.34)!important;
+  animation:cpuRonWinningTile .52s ease-out both;
+}
+
+@keyframes cpuRonWinningTile{
+  0%{transform:translateY(0) scale(1)}
+  52%{transform:translateY(-10px) scale(1.23)}
+  100%{transform:translateY(-7px) scale(1.18)}
+}
+
+.cpu-ron-callout{
+  position:absolute;
+  z-index:20;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-56%) scale(.92);
+  min-width:190px;
+  padding:10px 18px;
+  border:2px solid rgba(255,88,88,.72);
+  border-radius:16px;
+  text-align:center;
+  pointer-events:none;
+  opacity:0;
+  background:
+    radial-gradient(circle at 50% 0%,rgba(255,92,92,.18),transparent 52%),
+    rgba(28,7,7,.92);
+  box-shadow:
+    0 0 0 2px rgba(233,200,91,.18),
+    0 14px 32px rgba(0,0,0,.42),
+    0 0 30px rgba(255,72,72,.18);
+  transition:opacity .14s ease,transform .18s ease;
+}
+.cpu-ron-callout.show{
+  opacity:1;
+  transform:translate(-50%,-60%) scale(1);
+}
+.cpu-ron-callout span{
+  display:block;
+  color:#fff;
+  font-size:24px;
+  font-weight:1000;
+  letter-spacing:.08em;
+  text-shadow:0 0 14px rgba(255,70,70,.55);
+}
+.cpu-ron-callout b{
+  display:block;
+  margin-top:2px;
+  color:#efd88b;
+  font-size:11px;
+  letter-spacing:.05em;
+}
+
+@media (max-width:700px) and (orientation:portrait){
+  .status-dora-value{
+    min-height:49px;
+  }
+  .status-dora-value .mini-tile{
+    width:34px!important;
+    height:47px!important;
+  }
+  .status-build .status-item,
+  .status-play .status-item{
+    min-height:50px;
+  }
+
+  .cpu-ron-callout{
+    top:45%;
+    min-width:170px;
+    padding:8px 14px;
+  }
+  .cpu-ron-callout span{
+    font-size:21px;
+  }
+
+  .cpu-ron-freeze .river-player .tile.ron-winning-discard{
+    transform:translateY(-5px) scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .cpu-ron-freeze .river-player .tile.ron-winning-discard,
+  .cpu-ron-callout{
+    animation:none!important;
+    transition:none!important;
+  }
+}
+
+
+/* =========================================================
+   v0.4.43 流局は完全にニュートラル表示
+   ========================================================= */
+
+#result.draw-mode .result-card{
+  border-color:rgba(126,151,139,.22);
+  background:
+    linear-gradient(180deg,#10201a,#0b1713);
+  box-shadow:none;
+}
+
+#result.draw-mode #resultTitle{
+  color:#d6e0da;
+  text-shadow:none;
+}
+
+.draw-result-panel{
+  --tier:#81958b!important;
+  border-color:rgba(154,176,165,.16)!important;
+  background:
+    linear-gradient(180deg,rgba(18,35,29,.92),rgba(9,23,18,.96))!important;
+  box-shadow:none!important;
+}
+
+.draw-message{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:4px;
+  padding:8px 10px;
+  border-radius:10px;
+  border:1px solid rgba(169,188,178,.10);
+  background:rgba(255,255,255,.018);
+  color:#b9c8c0!important;
+  animation:none!important;
+  text-shadow:none!important;
+}
+
+.draw-message b{
+  color:#e1e9e4;
+  font-size:18px;
+  letter-spacing:.08em;
+}
+
+.draw-message span{
+  font-size:11px;
+}
+
+.draw-hand-section{
+  border-color:rgba(255,255,255,.035)!important;
+  background:rgba(0,0,0,.12)!important;
+  box-shadow:none!important;
+}
+
+#result.draw-mode .result-tile{
+  animation:none!important;
+  transition:none!important;
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 2px 0 #827b64,
+    0 3px 5px rgba(0,0,0,.20)!important;
+}
+
+#result.draw-mode .reveal-hand{
+  animation:none!important;
+  transition:none!important;
+}
+
+.draw-money-static{
+  display:flex;
+  justify-content:center;
+  gap:16px;
+  margin-top:8px;
+  padding:6px 8px;
+  color:#aebdb5;
+  font-size:11px;
+  font-weight:700;
+}
+
+.draw-money-static span{
+  min-width:120px;
+  text-align:center;
+}
+
+#result.draw-mode .result-next{
+  box-shadow:none!important;
+}
+
+@media (max-width:700px) and (orientation:portrait){
+  .draw-message{
+    padding:7px 8px;
+  }
+  .draw-message b{
+    font-size:16px;
+  }
+  .draw-money-static{
+    gap:6px;
+    font-size:10px;
+  }
+  .draw-money-static span{
+    min-width:0;
+    flex:1;
+  }
+}
+
+
+/* v0.4.44 audit fixes */
+.river .tile.latest-discard{
+  z-index:2;
+}
+
+/* キーボードフォーカスでも河の牌は操作対象に見えない */
+.river .river-static-tile:focus{
+  outline:none;
+}

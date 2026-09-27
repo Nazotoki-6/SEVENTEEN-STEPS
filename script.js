@@ -200,6 +200,8 @@ let SOUND={
   ducked:false,
   fadeFrame:null,
   fadeDuration:3000,
+  crossfadeDuration:1400,
+  transitionId:0,
   playPrimed:false,
   pendingResume:false,
   sfx:{}
@@ -291,13 +293,14 @@ function safePlay(audio){
   }
 }
 
-function fadeInBgm(duration=SOUND.fadeDuration){
+function fadeInBgm(duration=900){
   const audio=activeBgm();
   if(!audio||!SOUND.enabled)return;
 
   cancelBgmFade();
-  audio.volume=0;
 
+  const target=currentBgmTargetVolume();
+  const from=Math.max(0,Math.min(target,audio.volume||0));
   const started=performance.now();
 
   const step=now=>{
@@ -307,14 +310,69 @@ function fadeInBgm(duration=SOUND.fadeDuration){
     }
 
     const progress=Math.min(1,(now-started)/duration);
-    const eased=1-Math.pow(1-progress,3);
-    audio.volume=currentBgmTargetVolume()*eased;
+    const eased=progress<.5
+      ?2*progress*progress
+      :1-Math.pow(-2*progress+2,2)/2;
+
+    audio.volume=from+(target-from)*eased;
 
     if(progress<1){
       SOUND.fadeFrame=requestAnimationFrame(step)
     }else{
       SOUND.fadeFrame=null;
-      audio.volume=currentBgmTargetVolume()
+      audio.volume=target
+    }
+  };
+
+  SOUND.fadeFrame=requestAnimationFrame(step)
+}
+
+function crossfadeBgm(oldAudio,newAudio,duration=SOUND.crossfadeDuration){
+  cancelBgmFade();
+
+  if(!newAudio||!SOUND.enabled)return;
+
+  const target=currentBgmTargetVolume();
+  const oldStart=(oldAudio&&oldAudio!==newAudio&&!oldAudio.paused)
+    ? Math.max(0,Math.min(1,oldAudio.volume))
+    : 0;
+
+  if(oldAudio===newAudio||!oldAudio||oldAudio.paused){
+    newAudio.volume=0;
+    fadeInBgm(Math.min(duration,900));
+    return
+  }
+
+  newAudio.volume=0;
+  const started=performance.now();
+
+  const step=now=>{
+    if(!SOUND.enabled||newAudio!==activeBgm()){
+      cancelBgmFade();
+      return
+    }
+
+    const progress=Math.min(1,(now-started)/duration);
+    const eased=progress<.5
+      ?2*progress*progress
+      :1-Math.pow(-2*progress+2,2)/2;
+
+    // ロン待機中のduck状態がクロスフェード途中で変わっても即反映する。
+    const liveTarget=currentBgmTargetVolume();
+    newAudio.volume=liveTarget*eased;
+
+    if(oldAudio&&!oldAudio.paused){
+      oldAudio.volume=oldStart*(1-eased)
+    }
+
+    if(progress<1){
+      SOUND.fadeFrame=requestAnimationFrame(step)
+    }else{
+      SOUND.fadeFrame=null;
+      newAudio.volume=currentBgmTargetVolume();
+      if(oldAudio&&oldAudio!==newAudio){
+        oldAudio.pause()
+      }
     }
   };
 
@@ -323,6 +381,10 @@ function fadeInBgm(duration=SOUND.fadeDuration){
 
 function primePlayBgmFromGesture(){
   if(SOUND.playPrimed||!SOUND.playBgm)return;
+
+  // 対局中にBGMをONにした場合、ここで無音再生→pauseすると
+  // startBgm() と競合して対局曲を止めてしまうため、対局中はprimeしない。
+  if(SOUND.phase==="play"||SOUND.active===SOUND.playBgm)return;
 
   const a=SOUND.playBgm;
   const oldVolume=a.volume;
@@ -333,20 +395,25 @@ function primePlayBgmFromGesture(){
   try{
     const p=a.play();
 
-    if(p&&typeof p.then==="function"){
-      p.then(()=>{
-        a.pause();
-        try{a.currentTime=0}catch(e){}
-        a.volume=oldVolume;
-        SOUND.playPrimed=true
-      }).catch(()=>{
-        a.volume=oldVolume
-      })
-    }else{
+    const finishPrime=()=>{
+      // prime中に対局フェーズへ移った場合は、再生中の曲を止めない。
+      if(SOUND.phase==="play"||SOUND.active===a){
+        SOUND.playPrimed=true;
+        return
+      }
+
       a.pause();
       try{a.currentTime=0}catch(e){}
       a.volume=oldVolume;
       SOUND.playPrimed=true
+    };
+
+    if(p&&typeof p.then==="function"){
+      p.then(finishPrime).catch(()=>{
+        a.volume=oldVolume
+      })
+    }else{
+      finishPrime()
     }
   }catch(e){
     a.volume=oldVolume
@@ -360,35 +427,58 @@ function unlockAudioFromGesture(){
 }
 
 function setBgmPhase(phase){
-  SOUND.phase=phase==="play"?"play":"build";
+  const nextPhase=phase==="play"?"play":"build";
+  const oldAudio=SOUND.active||activeBgm();
+  const samePhase=SOUND.phase===nextPhase;
+  const transitionId=++SOUND.transitionId;
+
+  SOUND.phase=nextPhase;
   SOUND.ducked=false;
-  cancelBgmFade();
+  const nextAudio=activeBgm();
+  SOUND.active=nextAudio;
 
-  const audio=activeBgm();
-  SOUND.active=audio;
-  pauseInactiveBgm();
-
-  if(!audio){
+  if(!nextAudio){
     updateBgmButton();
     return
-  }
-
-  if(SOUND.phase==="play"){
-    try{audio.currentTime=0}catch(e){}
-    audio.volume=0
-  }else{
-    audio.volume=currentBgmTargetVolume()
   }
 
   if(!SOUND.enabled){
+    pauseBgm();
     updateBgmButton();
     return
   }
 
-  safePlay(audio).then(ok=>{
+  const stillCurrent=()=>(
+    transitionId===SOUND.transitionId &&
+    nextAudio===activeBgm() &&
+    SOUND.active===nextAudio
+  );
+
+  if(samePhase){
+    safePlay(nextAudio).then(ok=>{
+      if(!stillCurrent()){
+        if(nextAudio!==activeBgm()&&!nextAudio.paused)nextAudio.pause();
+        return
+      }
+      if(ok&&nextAudio.volume<currentBgmTargetVolume()*.8){
+        fadeInBgm(700)
+      }
+    });
+    updateBgmButton();
+    return
+  }
+
+  if(nextPhase==="play"){
+    try{nextAudio.currentTime=0}catch(e){}
+  }
+
+  safePlay(nextAudio).then(ok=>{
+    if(!stillCurrent()){
+      if(nextAudio!==activeBgm()&&!nextAudio.paused)nextAudio.pause();
+      return
+    }
     if(!ok)return;
-    if(SOUND.phase==="play")fadeInBgm();
-    else audio.volume=currentBgmTargetVolume()
+    crossfadeBgm(oldAudio,nextAudio)
   });
 
   updateBgmButton()
@@ -402,19 +492,28 @@ function startBgm(){
     return
   }
 
+  const transitionId=++SOUND.transitionId;
   cancelBgmFade();
-
-  if(SOUND.phase==="play")audio.volume=0;
-  else audio.volume=currentBgmTargetVolume();
+  SOUND.active=audio;
+  audio.volume=0;
 
   safePlay(audio).then(ok=>{
-    if(ok&&SOUND.phase==="play")fadeInBgm()
+    if(
+      transitionId!==SOUND.transitionId ||
+      audio!==activeBgm() ||
+      SOUND.active!==audio
+    ){
+      if(audio!==activeBgm()&&!audio.paused)audio.pause();
+      return
+    }
+    if(ok)fadeInBgm(900)
   });
 
   updateBgmButton()
 }
 
 function pauseBgm(){
+  SOUND.transitionId++;
   cancelBgmFade();
   for(const a of [SOUND.buildBgm,SOUND.playBgm]){
     if(a&&!a.paused)a.pause()
@@ -428,7 +527,7 @@ function resumePendingBgm(){
   if(!audio)return;
 
   safePlay(audio).then(ok=>{
-    if(ok&&SOUND.phase==="play"&&audio.volume===0)fadeInBgm()
+    if(ok&&audio.volume===0)fadeInBgm(900)
   })
 }
 
@@ -564,7 +663,10 @@ function newRound(){
   clearInterval(G.ronInt);
   G.pending=null;
   G.wasDraw=false;
+  $("#result")?.classList.remove("draw-mode");
   $("#ronBox")?.classList.add("hidden");
+  document.querySelector(".cpu-ron-callout")?.remove();
+  document.querySelector("#play .table-card")?.classList.remove("cpu-ron-freeze");
 
   let d=deck();
   G.hands=[sortTiles(d.slice(0,34)),sortTiles(d.slice(34,68))];
@@ -1343,7 +1445,9 @@ function appendDiscardToRiver(p,t,node=null){
   b.tabIndex=-1;
   if(typeof b.blur==="function")b.blur();
 
-  [...target.children].forEach(node=>node.classList.remove("latest-discard"));
+  // 「最新の捨て牌」は対局全体で1枚だけ。
+  document.querySelectorAll("#riverP .latest-discard,#riverC .latest-discard")
+    .forEach(node=>node.classList.remove("latest-discard"));
   target.appendChild(b);
   b.classList.add("latest-discard");
   animateDiscardToRiver(b,fromRect,p);
@@ -1372,22 +1476,60 @@ function renderPlay(){
   G.cand[0].forEach((t,i)=>$("#cand").append(makeCandidateTile(t,i)));
 
   $("#riverP").innerHTML="";
-  G.river[0].forEach((t,i)=>{
+  G.river[0].forEach(t=>{
     const node=el(t);
     node.classList.add("river-static-tile");
-    if(i===G.river[0].length-1)node.classList.add("latest-discard");
+    node.setAttribute("aria-disabled","true");
+    node.tabIndex=-1;
     $("#riverP").append(node)
   });
 
   $("#riverC").innerHTML="";
-  G.river[1].forEach((t,i)=>{
+  G.river[1].forEach(t=>{
     const node=el(t);
     node.classList.add("river-static-tile");
-    if(i===G.river[1].length-1)node.classList.add("latest-discard");
+    node.setAttribute("aria-disabled","true");
+    node.tabIndex=-1;
     $("#riverC").append(node)
   });
 
   updateTurnUI()
+}
+
+function previewCpuRonDiscard(t,ev){
+  const river=$("#riverP");
+  const winNode=river?.lastElementChild;
+  const table=document.querySelector("#play .table-card");
+
+  if(winNode){
+    winNode.classList.remove("latest-discard");
+    winNode.classList.add("ron-winning-discard")
+  }
+
+  table?.classList.add("cpu-ron-freeze");
+  $("#cand")?.classList.add("locked");
+  $("#turn").textContent="CPU ロン！";
+  $("#cpuThinking")?.classList.add("hidden");
+
+  let callout=document.querySelector(".cpu-ron-callout");
+  if(!callout){
+    callout=document.createElement("div");
+    callout.className="cpu-ron-callout";
+    callout.innerHTML=`<span>CPU ロン</span><b>この捨て牌で和了</b>`;
+    document.querySelector("#play .table-card")?.appendChild(callout)
+  }
+
+  requestAnimationFrame(()=>callout?.classList.add("show"));
+
+  G.pending={type:"cpuAutoRonPreview"};
+  playSfx("ron");
+
+  setTimeout(()=>{
+    callout?.classList.remove("show");
+    table?.classList.remove("cpu-ron-freeze");
+    G.pending=null;
+    finishRon(1,t,ev)
+  },900)
 }
 
 function discard(p,i,node=null){
@@ -1413,8 +1555,7 @@ function discard(p,i,node=null){
         ronPrompt(o,p,t,ev);
         return
       }else{
-        playSfx("ron");
-        finishRon(o,t,ev);
+        previewCpuRonDiscard(t,ev);
         return
       }
     }else{
@@ -1673,6 +1814,7 @@ function currentMoneyMarkup(winnerIndex=null,before=null,after=null){
 }
 
 function finishRon(w,t,ev){
+  $("#result").classList.remove("draw-mode");
   $("#next").textContent="次の局へ";
 
   const full=[...G.fixed[w],t];
@@ -1756,6 +1898,7 @@ function finishRon(w,t,ev){
 }
 
 function showFinalResult(){
+  $("#result").classList.remove("draw-mode");
   G.gameOver=true;
   const wi=G.money[0]>G.money[1]?0:1;
   const winner=wi===0?G.name:"CPU";
@@ -1779,25 +1922,44 @@ function showFinalResult(){
   $("#next").textContent="最初から"
 }
 
-function draw(){G.displayMoney=[...G.money];G.moneyFx=null;
+function draw(){
+  // 流局は勝敗演出を一切残さない。
+  clearMoneyAnimation();
+  G.displayMoney=[...G.money];
+  G.moneyFx=null;
+  G.pending=null;
+  setBgmDuck(false);
+
+  document.querySelector(".cpu-ron-callout")?.remove();
+  document.querySelector("#play .table-card")?.classList.remove("cpu-ron-freeze");
+  document.querySelectorAll(".ron-winning-discard").forEach(node=>node.classList.remove("ron-winning-discard"));
+  document.querySelectorAll(".latest-discard").forEach(node=>node.classList.remove("latest-discard"));
+
   $("#next").textContent="次の局へ";
   show("#result");
+  $("#result").classList.add("draw-mode");
   $("#resultTitle").textContent="流局";
   $("#resultBody").innerHTML=`
     <div class="result-panel draw-result-panel">
-      <div class="draw-message">17枚ずつ捨て切りました。親継続で同じ局をやり直します。</div>
+      <div class="draw-message">
+        <b>流局</b>
+        <span>17枚ずつ捨て切りました。親継続で同じ局をやり直します。</span>
+      </div>
 
-      <div class="result-section">
+      <div class="result-section draw-hand-section">
         <span class="result-label">${G.name}の固定13枚</span>
         ${resultFixedHandMarkup(G.fixed[0])}
       </div>
 
-      <div class="result-section">
+      <div class="result-section draw-hand-section">
         <span class="result-label">CPUの固定13枚</span>
         ${resultFixedHandMarkup(G.fixed[1])}
       </div>
 
-      ${currentMoneyMarkup(null)}
+      <div class="draw-money-static">
+        <span>${G.name}　¥${G.money[0].toLocaleString()}</span>
+        <span>CPU　¥${G.money[1].toLocaleString()}</span>
+      </div>
     </div>
   `;
   G.wasDraw=true
