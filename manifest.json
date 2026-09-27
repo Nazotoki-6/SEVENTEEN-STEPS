@@ -5,9 +5,9 @@
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "landscape",
-  "background_color": "#0d2d23",
-  "theme_color": "#0d2d23",
+  "orientation": "portrait-primary",
+  "background_color": "#07090a",
+  "theme_color": "#07090a",
   "icons": [
     {
       "src": "assets/icons/icon-192.png",
@@ -19,5 +19,6 @@
       "sizes": "512x512",
       "type": "image/png"
     }
-  ]
+  ],
+  "version": "0.4.41"
 }

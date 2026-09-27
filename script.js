@@ -477,7 +477,7 @@ function playSfx(name,volume=1){
 
 initAudio();
 
-let G={name:"",round:1,half:"表",dealer:0,money:[0,0],hands:[[],[]],fixed:[[],[]],cand:[[],[]],river:[[],[]],sel:[],dora:null,ura:null,turn:0,fur:[false,false],time:180,timer:null,pending:null,dice:[0,0],gameOver:false};
+let G={name:"",round:1,half:"表",dealer:0,money:[0,0],displayMoney:[0,0],moneyAnimFrame:null,moneyFx:null,hands:[[],[]],fixed:[[],[]],cand:[[],[]],river:[[],[]],sel:[],dora:null,ura:null,turn:0,fur:[false,false],time:180,timer:null,pending:null,dice:[0,0],gameOver:false};
 function deck(){let a=[];for(let s of SU)for(let n=1;n<=9;n++)for(let i=0;i<4;i++)a.push(n+s);for(let h of HO)for(let i=0;i<4;i++)a.push(h);return sh(a)}
 function sh(a){for(let i=a.length-1;i;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function tt(t){return t.length==2?t[0]+NM[t[1]]:NM[t]}
@@ -489,6 +489,59 @@ function decideInitialDealer(){
   G.dice=[a,b];
   G.dealer=a<b?0:1;
 }
+
+function moneyValuesShown(){
+  return Array.isArray(G.displayMoney)&&G.displayMoney.length===2?G.displayMoney:G.money
+}
+function renderBuildMoney(){
+  const box=$("#buildMoney");
+  if(!box)return;
+  const shown=moneyValuesShown();
+  const p=shown[0]||0;
+  const c=shown[1]||0;
+  box.textContent=`${G.name} ¥${Math.round(p).toLocaleString()}　CPU ¥${Math.round(c).toLocaleString()}`
+}
+function clearMoneyAnimation(){
+  if(G.moneyAnimFrame!==null){
+    cancelAnimationFrame(G.moneyAnimFrame);
+    G.moneyAnimFrame=null
+  }
+}
+function finishMoneyFxLater(){
+  setTimeout(()=>{
+    G.moneyFx=null;
+    renderMoneyStatus();
+    renderBuildMoney()
+  },1500)
+}
+function animateMoneyBoard(from,to,winnerIndex=null,amount=0){
+  clearMoneyAnimation();
+  G.displayMoney=[...from];
+  G.moneyFx=winnerIndex===null?null:{winnerIndex,amount,from:[...from],to:[...to]};
+  const start=performance.now();
+  const duration=950;
+  const step=(now)=>{
+    const r=Math.min(1,(now-start)/duration);
+    const eased=1-Math.pow(1-r,3);
+    G.displayMoney=[
+      Math.round(from[0]+(to[0]-from[0])*eased),
+      Math.round(from[1]+(to[1]-from[1])*eased)
+    ];
+    renderMoneyStatus();
+    renderBuildMoney();
+    if(r<1){
+      G.moneyAnimFrame=requestAnimationFrame(step)
+    }else{
+      G.moneyAnimFrame=null;
+      G.displayMoney=[...to];
+      renderMoneyStatus();
+      renderBuildMoney();
+      if(G.moneyFx)finishMoneyFxLater()
+    }
+  };
+  G.moneyAnimFrame=requestAnimationFrame(step)
+}
+
 function renderDora(id){
   const box=$(id);
   box.innerHTML=tileHTML(de(G.dora),true);
@@ -522,6 +575,8 @@ function newRound(){
   G.river=[[],[]];
   G.fur=[false,false];
   G.time=180;
+  G.displayMoney=[...G.money];
+  G.moneyFx=null;
 
   if(G.round==1&&G.half==="表"&&G.dice[0]===0)decideInitialDealer();
   build()
@@ -532,7 +587,7 @@ function build(){
   $("#round").textContent=`${G.round}回${G.half}`;
   $("#dealer").textContent=`${G.dealer?"CPU":G.name}${G.round===1&&G.half==="表"?` 🎲${G.dice[0]}-${G.dice[1]}`:""}`;
   renderDora("#dora");
-  $("#buildMoney").textContent=`${G.name} ¥${G.money[0].toLocaleString()}　CPU ¥${G.money[1].toLocaleString()}`;
+  renderBuildMoney();
   $("#buildTitle").textContent=`${G.name}の手作り`;
   renderBuild();
   clearInterval(G.timer);
@@ -664,7 +719,6 @@ function makeBuildTile(index,isSelected){
 function renderBuild(){
   timer();
 
-  // 選択確定後の再描画では、古いDOMに紐づく1回目クリック状態を残さない。
   if(buildInputArmedNode && !document.body.contains(buildInputArmedNode)){
     clearBuildInputArm()
   }
@@ -687,12 +741,30 @@ function renderBuild(){
 
   $("#count").textContent=G.sel.length;
 
-  let w=G.sel.length==13?waits(G.sel.map(i=>G.hands[0][i])):[];
-  $("#tenpai").textContent=w.length
-    ?`テンパイ：${sortTiles(w).map(tt).join("・")}`
-    :G.sel.length==13
-      ?"ノーテン"
-      :"";
+  const w=G.sel.length===13?waits(G.sel.map(i=>G.hands[0][i])):[];
+  const tenpai=$("#tenpai");
+  if(tenpai){
+    tenpai.textContent=w.length
+      ? `テンパイ ${w.length}種`
+      : G.sel.length===13
+        ? "ノーテン"
+        : "";
+  }
+
+  const waitPreview=$("#waitPreview");
+  const waitTiles=$("#waitTiles");
+  if(waitPreview&&waitTiles){
+    if(w.length){
+      waitPreview.classList.remove("hidden");
+      waitTiles.innerHTML=sortTiles(w).map(t=>`<span class="wait-tile" aria-label="${tt(t)}">${tileFaceMarkup(t)}</span>`).join("");
+    }else if(G.sel.length===13){
+      waitPreview.classList.remove("hidden");
+      waitTiles.innerHTML=`<span class="wait-empty">待ち牌なし</span>`;
+    }else{
+      waitPreview.classList.add("hidden");
+      waitTiles.innerHTML="";
+    }
+  }
 
   $("#confirm").disabled=!w.length;
   $("#clearSelection").disabled=G.sel.length===0
@@ -706,7 +778,7 @@ $("#clearSelection").onclick=()=>{
 };
 $("#confirm").onclick=()=>{clearBuildInputArm();playSfx("confirm");clearInterval(G.timer);startPlay()}
 function force(){clearBuildInputArm();let r=G.hands[0].map((_,i)=>i).filter(i=>!G.sel.includes(i));while(G.sel.length<13)G.sel.push(r.splice(Math.floor(Math.random()*r.length),1)[0]);playSfx("confirm",.75);startPlay()}
-function startPlay(){clearBuildInputArm();clearMouseDiscardArm();setBgmPhase("play");G.fixed[0]=sortTiles(G.sel.map(i=>G.hands[0][i]));G.cand[0]=sortTiles(G.hands[0].filter((_,i)=>!G.sel.includes(i)));makeComHand();G.turn=G.dealer;show("#play");renderPlay();if(G.turn==1)setTimeout(comTurn,450)}
+function startPlay(){clearBuildInputArm();clearMouseDiscardArm();setBgmPhase("play");G.fixed[0]=sortTiles(G.sel.map(i=>G.hands[0][i]));G.cand[0]=sortTiles(G.hands[0].filter((_,i)=>!G.sel.includes(i)));makeComHand();G.turn=G.dealer;G.displayMoney=[...G.money];show("#play");renderPlay();if(G.turn===1)setTimeout(comTurn,450)}
 
 function countsToHand(c){
   const a=[];
@@ -1047,23 +1119,31 @@ function renderMoneyStatus(){
   const box=$("#money");
   if(!box)return;
 
-  const pLeader=G.money[0]>G.money[1];
-  const cLeader=G.money[1]>G.money[0];
+  const shown=moneyValuesShown();
+  const pLeader=(shown[0]||0)>(shown[1]||0);
+  const cLeader=(shown[1]||0)>(shown[0]||0);
+
+  const deltaFor=idx=>{
+    if(!G.moneyFx||G.moneyFx.winnerIndex!==idx)return "";
+    return `<span class="money-delta">+¥${G.moneyFx.amount.toLocaleString()}</span>`
+  };
+
   box.innerHTML=`
     <span class="money-status">
-      <span class="money-chip ${pLeader?"leader":""}">
+      <span class="money-chip ${pLeader?"leader":""} ${G.moneyFx?.winnerIndex===0?"money-chip-win":""}">
         <span class="money-chip-name">${G.name}</span>
-        <b class="money-chip-value">¥${G.money[0].toLocaleString()}</b>
+        <b class="money-chip-value">¥${Math.round(shown[0]||0).toLocaleString()}</b>
+        ${deltaFor(0)}
       </span>
       <span class="money-divider">VS</span>
-      <span class="money-chip ${cLeader?"leader":""}">
+      <span class="money-chip ${cLeader?"leader":""} ${G.moneyFx?.winnerIndex===1?"money-chip-win":""}">
         <span class="money-chip-name">CPU</span>
-        <b class="money-chip-value">¥${G.money[1].toLocaleString()}</b>
+        <b class="money-chip-value">¥${Math.round(shown[1]||0).toLocaleString()}</b>
+        ${deltaFor(1)}
       </span>
     </span>
   `
 }
-
 
 function updateDiscardControl(){
   const humanTurn=G.turn===0 && !G.pending;
@@ -1089,7 +1169,19 @@ function updateDiscardControl(){
 }
 
 function updateTurnUI(){
-  $("#turn").textContent=G.turn===0?`${G.name}の番`:"CPUの番";
+  const humanTurn=G.turn===0;
+  $("#turn").textContent=humanTurn?`${G.name}の番`:"CPU 思考中…";
+  $("#cpuThinking")?.classList.toggle("hidden",humanTurn);
+
+  const card=document.querySelector("#play .table-card");
+  const cpuZone=document.querySelector("#play .cpu-zone");
+  const playerZone=document.querySelector("#play .player-zone");
+
+  card?.classList.toggle("turn-player",humanTurn);
+  card?.classList.toggle("turn-cpu",!humanTurn);
+  cpuZone?.classList.toggle("active-turn",!humanTurn);
+  playerZone?.classList.toggle("active-turn",humanTurn);
+
   updateDiscardControl()
 }
 
@@ -1251,7 +1343,9 @@ function appendDiscardToRiver(p,t,node=null){
   b.tabIndex=-1;
   if(typeof b.blur==="function")b.blur();
 
+  [...target.children].forEach(node=>node.classList.remove("latest-discard"));
   target.appendChild(b);
+  b.classList.add("latest-discard");
   animateDiscardToRiver(b,fromRect,p);
 
   if(p===0)updateCandidateIndexes()
@@ -1278,10 +1372,20 @@ function renderPlay(){
   G.cand[0].forEach((t,i)=>$("#cand").append(makeCandidateTile(t,i)));
 
   $("#riverP").innerHTML="";
-  G.river[0].forEach(t=>$("#riverP").append(el(t)));
+  G.river[0].forEach((t,i)=>{
+    const node=el(t);
+    node.classList.add("river-static-tile");
+    if(i===G.river[0].length-1)node.classList.add("latest-discard");
+    $("#riverP").append(node)
+  });
 
   $("#riverC").innerHTML="";
-  G.river[1].forEach(t=>$("#riverC").append(el(t)));
+  G.river[1].forEach((t,i)=>{
+    const node=el(t);
+    node.classList.add("river-static-tile");
+    if(i===G.river[1].length-1)node.classList.add("latest-discard");
+    $("#riverC").append(node)
+  });
 
   updateTurnUI()
 }
@@ -1550,17 +1654,20 @@ function englishTierName(tier){
   return "MANGAN"
 }
 
-function currentMoneyMarkup(winnerIndex=null){
+function currentMoneyMarkup(winnerIndex=null,before=null,after=null){
+  const prev=before||G.money;
+  const next=after||G.money;
+  const line=(idx,label)=>`
+      <div class="${winnerIndex===idx?"money-winner":""}">
+        <span>${label}</span>
+        <b>¥${next[idx].toLocaleString()}</b>
+        ${before?`<small>¥${prev[idx].toLocaleString()} → ¥${next[idx].toLocaleString()}</small>`:""}
+      </div>
+    `;
   return `
     <div class="result-money-board">
-      <div class="${winnerIndex===0?"money-winner":""}">
-        <span>${G.name}</span>
-        <b>¥${G.money[0].toLocaleString()}</b>
-      </div>
-      <div class="${winnerIndex===1?"money-winner":""}">
-        <span>CPU</span>
-        <b>¥${G.money[1].toLocaleString()}</b>
-      </div>
+      ${line(0,G.name)}
+      ${line(1,"CPU")}
     </div>
   `
 }
@@ -1595,7 +1702,10 @@ function finishRon(w,t,ev){
     )[tier];
   }
 
+  const moneyBefore=[...G.money];
   G.money[w]+=amount;
+  const moneyAfter=[...G.money];
+  animateMoneyBoard(moneyBefore,moneyAfter,w,amount);
   show("#result");
   $("#resultTitle").textContent=`${w?"CPU":G.name} ロン！`;
 
@@ -1638,7 +1748,7 @@ function finishRon(w,t,ev){
       </div>
 
       <div class="han-summary">${hanLine}</div>
-      ${currentMoneyMarkup(w)}
+      ${currentMoneyMarkup(w,moneyBefore,moneyAfter)}
     </div>
   `;
 
@@ -1669,7 +1779,7 @@ function showFinalResult(){
   $("#next").textContent="最初から"
 }
 
-function draw(){
+function draw(){G.displayMoney=[...G.money];G.moneyFx=null;
   $("#next").textContent="次の局へ";
   show("#result");
   $("#resultTitle").textContent="流局";
