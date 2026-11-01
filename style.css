@@ -3543,3 +3543,292 @@ body.rules-open{
 .river .river-static-tile:focus{
   outline:none;
 }
+
+
+/* =========================================================
+   v0.4.45 3D TABLE
+   CSS 3Dで立体感を強化。ゲームロジックは変更なし。
+   ========================================================= */
+
+:root{
+  --tile-depth:#8b816a;
+  --tile-side:#c9bea0;
+  --table-edge:#121512;
+  --table-felt:#092419;
+}
+
+/* 卓全体に奥行き */
+.table-card{
+  perspective:1400px;
+  perspective-origin:50% 42%;
+  overflow:visible;
+  background:
+    radial-gradient(ellipse at 50% 18%,rgba(222,194,94,.07),transparent 38%),
+    linear-gradient(180deg,#0b1613 0%,#07100e 100%);
+  border-bottom:5px solid #050706;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.035),
+    0 8px 0 #030504,
+    0 16px 30px rgba(0,0,0,.35);
+}
+
+.mahjong-table{
+  transform-style:preserve-3d;
+  position:relative;
+}
+
+/* 中央卓面 */
+.table-center{
+  transform-style:preserve-3d;
+  transform:rotateX(2.2deg) translateZ(0);
+  transform-origin:50% 50%;
+  background:
+    radial-gradient(circle at 50% 45%,rgba(213,186,91,.055),transparent 30%),
+    linear-gradient(180deg,rgba(6,38,26,.88),rgba(3,24,17,.93));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.025),
+    inset 0 -12px 25px rgba(0,0,0,.16),
+    0 6px 14px rgba(0,0,0,.18);
+}
+
+/* CPU側は少し奥へ */
+.cpu-zone{
+  transform-style:preserve-3d;
+  transform:translateZ(-8px) scale(.99);
+  transform-origin:50% 100%;
+}
+
+/* 自分側は手前へ */
+.player-zone{
+  transform-style:preserve-3d;
+  transform:translateZ(12px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.035),
+    0 -2px 0 rgba(226,199,105,.035),
+    0 10px 22px rgba(0,0,0,.16);
+}
+
+/* 牌本体：前面＋厚み */
+.tile{
+  transform-style:preserve-3d;
+  transform-origin:50% 82%;
+  backface-visibility:hidden;
+  border-top-color:#d9d0b7!important;
+  border-left-color:#c9bea0!important;
+  border-right-color:#a99f86!important;
+  border-bottom-color:#847b66!important;
+  box-shadow:
+    inset 1px 1px 0 rgba(255,255,255,.90),
+    inset -1px -1px 0 rgba(101,88,57,.10),
+    0 2px 0 #c5b99a,
+    0 4px 0 #9b9178,
+    0 7px 0 #766f5e,
+    0 11px 14px rgba(0,0,0,.30)!important;
+  transition:
+    transform .13s ease,
+    box-shadow .13s ease,
+    filter .13s ease;
+}
+
+/* PCでは手牌を少し持ち上げる */
+@media (hover:hover) and (pointer:fine){
+  .candidate-tiles .tile:hover,
+  #pool .tile:hover,
+  #selected .tile:hover{
+    transform:translateY(-7px) rotateX(-3deg) scale(1.035);
+    z-index:8;
+    box-shadow:
+      inset 1px 1px 0 rgba(255,255,255,.94),
+      inset -1px -1px 0 rgba(101,88,57,.10),
+      0 3px 0 #c5b99a,
+      0 6px 0 #9b9178,
+      0 10px 0 #766f5e,
+      0 17px 20px rgba(0,0,0,.32)!important;
+  }
+}
+
+.candidate-tiles .tile:active,
+#pool .tile:active,
+#selected .tile:active{
+  transform:translateY(2px) rotateX(2deg) scale(.985);
+  box-shadow:
+    inset 1px 1px 0 rgba(255,255,255,.92),
+    0 1px 0 #c5b99a,
+    0 2px 0 #9b9178,
+    0 4px 0 #766f5e,
+    0 6px 8px rgba(0,0,0,.22)!important;
+}
+
+/* Wクリック待機・選択中は浮かせる */
+.build-input-armed,
+.mouse-discard-armed{
+  transform:translateY(-8px) rotateX(-4deg) scale(1.04)!important;
+  z-index:10;
+}
+
+/* 固定手牌は整然と立てる */
+.fixed-row{
+  perspective:900px;
+  perspective-origin:50% 100%;
+}
+.fixed-row .tile{
+  transform:rotateX(-2deg);
+  box-shadow:
+    inset 1px 1px 0 rgba(255,255,255,.94),
+    0 3px 0 #c5b99a,
+    0 6px 0 #988e76,
+    0 9px 0 #746d5c,
+    0 13px 16px rgba(0,0,0,.30)!important;
+}
+
+/* 河は卓に少し寝ているように見せる */
+.river-block{
+  perspective:900px;
+  perspective-origin:50% 20%;
+}
+.river{
+  transform-style:preserve-3d;
+  box-shadow:
+    inset 0 7px 14px rgba(0,0,0,.15),
+    inset 0 -1px 0 rgba(255,255,255,.02);
+}
+.river .tile{
+  transform:rotateX(7deg) translateZ(-1px);
+  transform-origin:50% 100%;
+  box-shadow:
+    inset 1px 1px 0 rgba(255,255,255,.88),
+    0 1px 0 #bbb094,
+    0 3px 0 #8d846f,
+    0 5px 7px rgba(0,0,0,.25)!important;
+}
+
+/* 最新牌は卓から少し浮く */
+.river .tile.latest-discard{
+  transform:rotateX(5deg) translateY(-3px) translateZ(8px) scale(1.055);
+  box-shadow:
+    0 0 0 2px rgba(229,194,85,.30),
+    0 0 15px rgba(229,194,85,.15),
+    inset 1px 1px 0 rgba(255,255,255,.92),
+    0 2px 0 #bbb094,
+    0 4px 0 #8d846f,
+    0 8px 10px rgba(0,0,0,.30)!important;
+}
+
+/* CPUの裏牌 */
+.cpu-hand-backs{
+  perspective:900px;
+  transform-style:preserve-3d;
+}
+.tile-back{
+  position:relative;
+  transform:rotateX(-4deg);
+  transform-origin:50% 100%;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.45),
+    0 2px 0 #b7aa88,
+    0 4px 0 #85795d,
+    0 7px 9px rgba(0,0,0,.24);
+}
+.tile-back:nth-child(1),
+.tile-back:nth-child(2),
+.tile-back:nth-child(3){transform:rotateX(-4deg) rotateZ(-1.5deg)}
+.tile-back:nth-child(11),
+.tile-back:nth-child(12),
+.tile-back:nth-child(13){transform:rotateX(-4deg) rotateZ(1.5deg)}
+
+/* ドラ牌も立体表示 */
+.status-dora-value{
+  perspective:600px;
+}
+.status-dora-value .mini-tile{
+  position:relative;
+  transform:rotateX(-3deg);
+  border-bottom:2px solid #817863!important;
+  box-shadow:
+    inset 1px 1px 0 rgba(255,255,255,.90),
+    0 2px 0 #c1b697,
+    0 4px 0 #8f866f,
+    0 7px 10px rgba(0,0,0,.30)!important;
+}
+
+/* 結果画面も3D感 */
+.result-tile,
+.winning-result-tile{
+  transform-style:preserve-3d;
+  border-bottom:2px solid #857b65!important;
+  box-shadow:
+    inset 1px 1px 0 rgba(255,255,255,.92),
+    0 2px 0 #c0b497,
+    0 4px 0 #8d836d,
+    0 7px 10px rgba(0,0,0,.25)!important;
+}
+
+/* CPUロンの当たり牌は飛び出す */
+.cpu-ron-freeze .river-player .tile.ron-winning-discard{
+  transform:
+    rotateX(2deg)
+    translateY(-10px)
+    translateZ(28px)
+    scale(1.20)!important;
+}
+
+/* スマホでは角度を弱める */
+@media (max-width:700px) and (orientation:portrait){
+  .table-card{
+    perspective:1100px;
+    border-bottom-width:4px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.03),
+      0 5px 0 #030504,
+      0 10px 20px rgba(0,0,0,.28);
+  }
+
+  .table-center{
+    transform:rotateX(1.5deg);
+  }
+
+  .cpu-zone{
+    transform:translateZ(-4px) scale(.995);
+  }
+
+  .player-zone{
+    transform:translateZ(6px);
+  }
+
+  .tile{
+    box-shadow:
+      inset 1px 1px 0 rgba(255,255,255,.90),
+      0 1px 0 #c5b99a,
+      0 3px 0 #9b9178,
+      0 5px 0 #766f5e,
+      0 8px 10px rgba(0,0,0,.25)!important;
+  }
+
+  .fixed-row .tile{
+    transform:rotateX(-1deg);
+  }
+
+  .river .tile{
+    transform:rotateX(4deg);
+  }
+
+  .river .tile.latest-discard{
+    transform:rotateX(3deg) translateY(-2px) translateZ(5px) scale(1.04);
+  }
+
+  .build-input-armed,
+  .mouse-discard-armed{
+    transform:translateY(-5px) rotateX(-2deg) scale(1.025)!important;
+  }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .tile,
+  .tile-back,
+  .table-center,
+  .cpu-zone,
+  .player-zone{
+    transition:none!important;
+    animation:none!important;
+  }
+}
